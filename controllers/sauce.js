@@ -1,4 +1,5 @@
 const Sauce = require('../models/sauce');
+const fs = require('fs');
 
 exports.createSauce = (req, res, next) => {
     const sauceObject = JSON.parse(req.body.sauce);
@@ -16,7 +17,10 @@ exports.createSauce = (req, res, next) => {
     console.log(sauce);
     sauce.save()
     .then(() => { res.status(201).json({ message: 'Sauce enregistré !' })})
-    .catch(error => { res.status(400).json( { error })});
+    .catch(error => { 
+        console.error(error);
+        res.status(500).json( { error: error.message })
+    });
 };
 
 exports.updateSauce = (req, res, next) => {
@@ -33,11 +37,12 @@ exports.updateSauce = (req, res, next) => {
             } else {
                 Sauce.updateOne({ _id: req.params.id}, { ...sauceObject, _id: req.params.id})
                 .then(() => res.status(200).json({ message : 'Sauce modifié!' }))
-                .catch(error => res.status(401).json({ error }));
+                .catch(error => res.status(500).json({ error: error.message }));
             }
         })
         .catch((error) => {
-            res.status(400).json({ error });
+            console.error(error);
+            res.status(404).json({ error: error.message });
         });
 };
 
@@ -51,23 +56,80 @@ exports.deleteSauce = (req, res, next) => {
             fs.unlink(`images/${filename}`, () => {
                 Sauce.deleteOne({_id: req.params.id})
                     .then(() => { res.status(200).json({ message: 'Sauce supprimé !' })})
-                    .catch(error => res.status(401).json({ error }));
+                    .catch(error => {
+                        console.error(error);
+                        res.status(500).json({ error: error.message })
+                    });
             });
         }
     })
-    .catch( error => {
-        res.status(500).json({ error });
+    .catch((error) => {
+        console.error(error);
+        res.status(500).json({ error: error.message });
     }); 
 };
 
 exports.getSauce = (req, res, next) => {
     Sauce.findOne ({ _id: req.params.id })
     .then(sauce => res.status(200).json(sauce))
-    .catch(error =>res.status(404).json({ error }));
+    .catch(error => {
+        console.error(error);
+        res.status(404).json({ error: error.message });
+    });
 };
 
 exports.getAllSauce = (req, res, next) => {
     Sauce.find()
     .then(sauces => res.status(200).json(sauces))
-    .catch(error =>res.status(400).json({ error }));
+    .catch(error => {
+        console.error(error);
+        res.status(500).json({ error: error.message })
+    });
+};
+
+exports.likeSauce = (req, res, next) => {
+    const { userId, like } = req.body;
+    Sauce.findOne({ _id: req.params.id })
+    .then((sauce) => {
+        let updateQuery = (like === 1) ? {
+            $push: {
+                usersLiked: userId
+            },
+            $inc: {
+                likes: 1
+            }
+        } : (like === -1) ? {
+            $push: {
+                usersDisliked: userId
+            },
+            $inc: {
+                dislikes: 1
+            }
+        } : (sauce.usersLiked.includes(userId)) ? {
+            $pull: {
+                usersLiked: userId
+            },
+            $inc: {
+                likes: -1
+            }
+        } : {
+            $pull: {
+                usersDisliked: userId
+            },
+            $inc: {
+                dislikes: -1
+            }
+        };
+
+        Sauce.updateOne({ _id: req.params.id}, updateQuery)
+        .then(() => res.status(200).json({ message : 'Sauce modifié!' }))
+        .catch(error => {
+            console.error(error);
+            res.status(500).json({ error: error.message })
+        });
+    })
+    .catch((error) => {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    });
 };
